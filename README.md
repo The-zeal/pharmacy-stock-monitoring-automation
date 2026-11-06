@@ -31,6 +31,12 @@ It demonstrates how workflow automation can improve inventory visibility and red
 7. Inventory execution results are recorded in Google Sheets.
 8. A separate error workflow handles automatic execution failures.
 
+## Workflow Overview
+
+The screenshot below shows the complete n8n automation workflow, including inventory monitoring, low-stock detection, email notifications, alert-state management, and execution logging.
+
+![Pharmacy Stock Monitoring Automation Workflow](screenshots/workflow-overview.png)
+
 ## Technology Stack
 
 | Technology | Purpose |
