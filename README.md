@@ -77,3 +77,26 @@ This automation demonstrates how pharmacy inventory processes can be improved th
 **The-zeal**
 
 GitHub: [https://github.com/The-zeal](https://github.com/The-zeal)
+
+
+## Final Workflow Validation
+
+The Pharmacy Stock Monitoring Automation workflow was successfully executed after the final connection corrections.
+
+### End-to-End Test Results
+
+| Test | Expected Result | Status |
+|---|---|---|
+| Low-stock detection | Identify products below minimum stock | Passed |
+| Alert generation | Build a low-stock notification | Passed |
+| Email notification | Deliver alert to the configured email address | Passed |
+| Alert-state update | Save the alert state after notification | Passed |
+| Workflow execution | Execute the connected workflow nodes successfully | Passed |
+
+### Final Verification
+
+- All relevant workflow nodes displayed successful execution indicators (green checkmarks).
+- The low-stock alert email was successfully received.
+- The workflow was published and active after the corrections.
+
+These tests demonstrate the workflow's ability to detect low inventory, notify stakeholders, and maintain alert states while reducing unnecessary duplicate notifications.
