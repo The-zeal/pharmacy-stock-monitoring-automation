@@ -43,6 +43,12 @@ The screenshot below demonstrates a successful execution of the automation, with
 
 ![Successful Pharmacy Stock Monitoring Automation Execution](screenshots/successful-execution.png)
 
+## Low-Stock Email Notification
+
+This screenshot demonstrates the automated email notification sent when a pharmacy product falls below its defined minimum stock level.
+
+![Low-Stock Email Alert](screenshots/low-stock-email-alert.png)
+
 ## Technology Stack
 
 | Technology | Purpose |
