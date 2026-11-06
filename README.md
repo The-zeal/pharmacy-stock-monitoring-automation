@@ -37,6 +37,12 @@ The screenshot below shows the complete n8n automation workflow, including inven
 
 ![Pharmacy Stock Monitoring Automation Workflow](screenshots/workflow-overview.png)
 
+## Successful Workflow Execution
+
+The screenshot below demonstrates a successful execution of the automation, with the relevant workflow nodes completing successfully.
+
+![Successful Pharmacy Stock Monitoring Automation Execution](screenshots/successful-execution.png)
+
 ## Technology Stack
 
 | Technology | Purpose |
