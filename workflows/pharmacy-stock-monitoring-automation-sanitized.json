@@ -1,0 +1,745 @@
+{
+  "name": "Pharmacy Stock Monitoring Automation",
+  "nodes": [
+    {
+      "parameters": {
+        "jsCode": "\nconst items = $input.all();\n\nreturn items.map(item => {\n  const row = item.json;\n\n  const product = String(row.product ?? \"\").trim();\n\n  // Preserve blank values before converting to numbers.\n  const quantityRaw = row.quantity;\n  const minimumRaw = row.minimum_stock;\n\n  const quantityIsBlank =\n    quantityRaw === null ||\n    quantityRaw === undefined ||\n    String(quantityRaw).trim() === \"\";\n\n  const minimumIsBlank =\n    minimumRaw === null ||\n    minimumRaw === undefined ||\n    String(minimumRaw).trim() === \"\";\n\n  const quantity = Number(quantityRaw);\n  const minimum = Number(minimumRaw);\n\n  const invalid =\n    !product ||\n    quantityIsBlank ||\n    minimumIsBlank ||\n    !Number.isFinite(quantity) ||\n    !Number.isFinite(minimum) ||\n    quantity < 0 ||\n    minimum < 0;\n\n  if (invalid) {\n    return {\n      json: {\n        ...row,\n        status: \"INVALID DATA\",\n        quantity_difference: null\n      }\n    };\n  }\n\n  return {\n    json: {\n      ...row,\n      quantity,\n      minimum_stock: minimum,\n      quantity_difference: quantity - minimum,\n      status: quantity < minimum\n        ? \"LOW STOCK\"\n        : \"SUFFICIENT\"\n    }\n  };\n});\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        416,
+        0
+      ],
+      "id": "27f8d0db-7e41-4e6a-8463-bd1af585bde1",
+      "name": "Classify Stock"
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "RECONFIGURE_GOOGLE_SHEET",
+          "mode": "list",
+          "cachedResultName": "Pharmacy Inventory Database"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Sheet1",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1dZjm_0Pz4LJYGOUUigykdguLwvsFKPGADvn6pSacmng/edit#gid=0"
+        },
+        "filtersUI": {
+          "values": []
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        64,
+        0
+      ],
+      "id": "1dd6969b-3d5d-4682-aa53-1e42b643d88d",
+      "name": "Get row(s) in sheet"
+    },
+    {
+      "parameters": {
+        "fromEmail": "your-email@example.com",
+        "toEmail": "your-email@example.com",
+        "subject": "=Pharmacy Stock Report — {{ $json.report_date }}",
+        "html": "={{ $json.html_report }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [
+        832,
+        -288
+      ],
+      "id": "ed6ace34-8ed7-49fb-aa82-e2d97ca796a9",
+      "name": "Send an Email"
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "triggerAtHour": 18
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.3,
+      "position": [
+        -320,
+        272
+      ],
+      "id": "d177bf1c-125c-4e40-ab34-55fdd00752ac",
+      "name": "Schedule Trigger"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        -320,
+        0
+      ],
+      "id": "c11ddcc2-0328-43a4-b234-70e3b875dd99",
+      "name": "When clicking ‘Execute workflow’"
+    },
+    {
+      "parameters": {
+        "fromEmail": "your-email@example.com",
+        "toEmail": "your-email@example.com",
+        "subject": "={{ $json.alert_subject }}",
+        "html": "={{ $json.html_alert }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [
+        1616,
+        0
+      ],
+      "id": "4e68affd-583a-4dda-b2f4-46feb8c58271",
+      "name": "Send an Email1"
+    },
+    {
+      "parameters": {
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "value": "RECONFIGURE_DATA_TABLE",
+          "mode": "list",
+          "cachedResultName": "Pharmacy Stock Alert State"
+        },
+        "returnAll": true
+      },
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        48,
+        272
+      ],
+      "id": "6ac78c22-5641-4b62-8f64-3593531ad42d",
+      "name": "Get Alert States"
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.all().map(item => item.json);\n\nconst lowStock = items.filter(\n  item => item.status === \"LOW STOCK\"\n);\n\nconst invalid = items.filter(\n  item => item.status === \"INVALID DATA\"\n);\n\nconst date = new Date().toLocaleString(\"en-NG\", {\n  timeZone: \"Africa/Lagos\",\n  dateStyle: \"medium\",\n  timeStyle: \"short\"\n});\n\nconst escapeHtml = value =>\n  String(value ?? \"\").replace(/[&<>\"']/g, char => ({\n    \"&\": \"&amp;\",\n    \"<\": \"&lt;\",\n    \">\": \"&gt;\",\n    '\"': \"&quot;\",\n    \"'\": \"&#39;\"\n  })[char]);\n\nconst rows = items.map(item => {\n  const status = item.status ?? \"UNKNOWN\";\n  const color = status === \"LOW STOCK\"\n    ? \"#b91c1c\"\n    : status === \"SUFFICIENT\"\n      ? \"#15803d\"\n      : \"#92400e\";\n\n  return `\n    <tr>\n      <td>${escapeHtml(item.product)}</td>\n      <td>${escapeHtml(item.quantity)}</td>\n      <td>${escapeHtml(item.minimum_stock)}</td>\n      <td>${escapeHtml(item.quantity_difference ?? \"N/A\")}</td>\n      <td style=\"color:${color};font-weight:bold\">\n        ${escapeHtml(status)}\n      </td>\n    </tr>`;\n}).join(\"\");\n\nconst html = `\n  <h2>Pharmacy Inventory Report</h2>\n  <p><strong>Report generated:</strong> ${escapeHtml(date)}</p>\n  <p><strong>Products checked:</strong> ${items.length}</p>\n  <p><strong>Low-stock products:</strong> ${lowStock.length}</p>\n  <p><strong>Invalid records:</strong> ${invalid.length}</p>\n\n  <table border=\"1\" cellpadding=\"8\"\n    cellspacing=\"0\" style=\"border-collapse:collapse\">\n    <thead>\n      <tr>\n        <th>Product</th>\n        <th>Current Stock</th>\n        <th>Minimum Stock</th>\n        <th>Difference</th>\n        <th>Status</th>\n      </tr>\n    </thead>\n    <tbody>${rows}</tbody>\n  </table>\n\n  <p>Please review low-stock products and arrange replenishment\n  according to approved pharmacy procedures.</p>\n`;\n\nreturn [{\n  json: {\n    report_date: date,\n    total_products: items.length,\n    low_stock_count: lowStock.length,\n    invalid_count: invalid.length,\n    html_report: html\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        624,
+        -288
+      ],
+      "id": "a112667e-f285-4b58-9e53-c0a74db5ab61",
+      "name": "Build Report"
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "advanced": true,
+        "mergeByFields": {
+          "values": [
+            {
+              "field1": "product",
+              "field2": "product"
+            }
+          ]
+        },
+        "joinMode": "enrichInput1",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        608,
+        256
+      ],
+      "id": "f73cb4ba-ce06-4615-9ab2-487483b01fa5",
+      "name": "Merge Stock and Alert State"
+    },
+    {
+      "parameters": {
+        "jsCode": "\nconst items = $input.all();\n\nreturn items.map(item => {\n  const row = item.json;\n\n  const status = String(row.status ?? \"\")\n    .trim()\n    .toUpperCase();\n\n  const alertActive =\n    row.alert_active === true ||\n    String(row.alert_active).toLowerCase() === \"true\";\n\n  let action = \"NONE\";\n\n  if (status === \"LOW STOCK\" && !alertActive) {\n    action = \"SEND_ALERT\";\n  } else if (status === \"SUFFICIENT\" && alertActive) {\n    action = \"RESET_ALERT\";\n  }\n\n  return {\n    json: {\n      ...row,\n      alert_action: action\n    }\n  };\n});\n\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        832,
+        256
+      ],
+      "id": "be137879-cfbb-4b62-8ff2-04b4bcf8b2a5",
+      "name": "Decide Alert Actions"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "848640dc-1937-4bed-89ab-fdcd73f35549",
+              "leftValue": "={{ $json.alert_action }}",
+              "rightValue": "SEND_ALERT",
+              "operator": {
+                "type": "string",
+                "operation": "equals",
+                "name": "filter.operator.equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        1136,
+        16
+      ],
+      "id": "2bcd5471-7715-41cd-9488-e3d5097514ce",
+      "name": "Is New Alert Required"
+    },
+    {
+      "parameters": {
+        "jsCode": "\nconst alertProducts = $(\"Build Low-Stock Alert\")\n  .first()\n  .json\n  .alert_products ?? [];\n\nreturn alertProducts.map(item => ({\n  json: {\n    product: item.product,\n    alert_active: true,\n    last_alert_date: new Date().toISOString()\n  }\n}));\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1824,
+        0
+      ],
+      "id": "1ed1f92f-52ae-45ee-b82a-37068f107833",
+      "name": "Prepare Alert State Updates"
+    },
+    {
+      "parameters": {
+        "jsCode": "\nconst items = $input.all().map(item => item.json);\n\nconst escapeHtml = value =>\n  String(value ?? \"\").replace(/[&<>\"']/g, char => ({\n    \"&\": \"&amp;\",\n    \"<\": \"&lt;\",\n    \">\": \"&gt;\",\n    '\"': \"&quot;\",\n    \"'\": \"&#39;\"\n  })[char]);\n\nconst date = new Date().toLocaleString(\"en-NG\", {\n  timeZone: \"Africa/Lagos\",\n  dateStyle: \"medium\",\n  timeStyle: \"short\"\n});\n\nconst rows = items.map(item => `\n  <tr>\n    <td>${escapeHtml(item.product)}</td>\n    <td>${escapeHtml(item.quantity)}</td>\n    <td>${escapeHtml(item.minimum_stock)}</td>\n    <td>${escapeHtml(item.quantity_difference)}</td>\n  </tr>\n`).join(\"\");\n\nconst html = `\n  <h2>Pharmacy Low-Stock Alert</h2>\n  <p><strong>Generated:</strong> ${escapeHtml(date)}</p>\n  <p><strong>Products requiring review:</strong> ${items.length}</p>\n  <table border=\"1\" cellpadding=\"8\" cellspacing=\"0\"\n         style=\"border-collapse:collapse\">\n    <thead>\n      <tr>\n        <th>Product</th>\n        <th>Current Stock</th>\n        <th>Minimum Stock</th>\n        <th>Difference</th>\n      </tr>\n    </thead>\n    <tbody>${rows}</tbody>\n  </table>\n  <p>Please review these items and arrange replenishment\n  according to approved pharmacy procedures.</p>\n`;\n\nreturn [{\n  json: {\n    alert_date: date,\n    low_stock_count: items.length,\n    alert_subject: `Pharmacy Low-Stock Alert — ${items.length} item(s)`,\n    html_alert: html,\n\n    alert_products: items.map(item => ({\n      product: item.product,\n      quantity: item.quantity,\n      minimum_stock: item.minimum_stock\n    }))\n  }\n}];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1408,
+        0
+      ],
+      "id": "587089e8-9869-445d-8f86-1e9675419180",
+      "name": "Build Low-Stock Alert"
+    },
+    {
+      "parameters": {
+        "operation": "upsert",
+        "dataTableId": {
+          "__rl": true,
+          "value": "RECONFIGURE_DATA_TABLE",
+          "mode": "list",
+          "cachedResultName": "Pharmacy Stock Alert State"
+        },
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "product",
+              "keyValue": "={{ $json.product }}"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "product": "={{ $json.product }}",
+            "last_alert_date": "={{ $json.last_alert_date }}",
+            "alert_active": "={{ $json.alert_active }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "product",
+              "displayName": "product",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "alert_active",
+              "displayName": "alert_active",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "boolean",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "last_alert_date",
+              "displayName": "last_alert_date",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        2032,
+        0
+      ],
+      "id": "6d40d8fe-eace-40d9-8b60-4b109bac102c",
+      "name": "Save Alert State"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "563dfec9-9b79-4a7b-a807-8666d0ecde2e",
+              "leftValue": "={{ $json.alert_action }}",
+              "rightValue": "RESET_ALERT",
+              "operator": {
+                "type": "string",
+                "operation": "equals",
+                "name": "filter.operator.equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        1136,
+        528
+      ],
+      "id": "20483d29-34bc-422c-9c7a-6dc94aea6967",
+      "name": "Is Alert Reset Required"
+    },
+    {
+      "parameters": {
+        "jsCode": "\nreturn $input.all().map(item => ({\n  json: {\n    product: item.json.product,\n    alert_active: false,\n    last_alert_date: item.json.last_alert_date ?? \"\"\n  }\n}));\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1376,
+        512
+      ],
+      "id": "9a2fdeb0-46da-4a57-8e72-c2a198077d4d",
+      "name": "Prepare Alert Reset"
+    },
+    {
+      "parameters": {
+        "operation": "upsert",
+        "dataTableId": {
+          "__rl": true,
+          "value": "RECONFIGURE_DATA_TABLE",
+          "mode": "list",
+          "cachedResultName": "Pharmacy Stock Alert State"
+        },
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "product",
+              "keyValue": "={{ $json.product }}"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "product": "={{ $json.product }}",
+            "last_alert_date": "={{ $json.last_alert_date }}",
+            "alert_active": "={{ $json.alert_active }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "product",
+              "displayName": "product",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "alert_active",
+              "displayName": "alert_active",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "boolean",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "last_alert_date",
+              "displayName": "last_alert_date",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        1600,
+        512
+      ],
+      "id": "5aef8fb6-ea67-45a6-8e31-f7a70aca37a0",
+      "name": "Reset Alert State"
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "RECONFIGURE_GOOGLE_SHEET",
+          "mode": "list",
+          "cachedResultName": "Pharmacy Automation Execution Log"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Sheet1",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1KY8tl3uMrdH4qBHODya3vJCLZUBmNzfNB5kxbZ_kdM4/edit#gid=0"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "execution_date": "={{ $now.setZone('Africa/Lagos').toISO() }}",
+            "product": "={{ $json.product }}",
+            "quantity": "={{ $json.quantity }}",
+            "minimum_stock": "={{ $json.minimum_stock }}",
+            "status": "={{ $json.status }}",
+            "alert_action": "={{ $json.alert_action }}",
+            "decision_result": "={{   $json.alert_action === 'SEND_ALERT'     ? 'New alert required'     : $json.alert_action === 'RESET_ALERT'     ? 'Alert reset required'     : $json.status === 'INVALID DATA'     ? 'Invalid inventory record'     : $json.status === 'LOW STOCK'     ? 'Duplicate alert suppressed'     : 'Sufficient stock - no action' }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "execution_date",
+              "displayName": "execution_date",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "product",
+              "displayName": "product",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "quantity",
+              "displayName": "quantity",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "minimum_stock",
+              "displayName": "minimum_stock",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "status",
+              "displayName": "status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "alert_action",
+              "displayName": "alert_action",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "decision_result",
+              "displayName": "decision_result",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        1136,
+        256
+      ],
+      "id": "b598b91f-8751-4cb0-8b07-cf8d3429c5cc",
+      "name": "Log Inventory Execution"
+    }
+  ],
+  "pinData": {
+    "When clicking ‘Execute workflow’": [
+      {
+        "json": {},
+        "pairedItem": {
+          "item": 0
+        }
+      }
+    ]
+  },
+  "connections": {
+    "Get row(s) in sheet": {
+      "main": [
+        [
+          {
+            "node": "Classify Stock",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Classify Stock": {
+      "main": [
+        [
+          {
+            "node": "Merge Stock and Alert State",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Build Report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "Get row(s) in sheet",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Get Alert States",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "When clicking ‘Execute workflow’": {
+      "main": [
+        [
+          {
+            "node": "Get row(s) in sheet",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Get Alert States",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Alert States": {
+      "main": [
+        [
+          {
+            "node": "Merge Stock and Alert State",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Build Report": {
+      "main": [
+        [
+          {
+            "node": "Send an Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge Stock and Alert State": {
+      "main": [
+        [
+          {
+            "node": "Decide Alert Actions",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Decide Alert Actions": {
+      "main": [
+        [
+          {
+            "node": "Is New Alert Required",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Is Alert Reset Required",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Log Inventory Execution",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is New Alert Required": {
+      "main": [
+        [
+          {
+            "node": "Build Low-Stock Alert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send an Email1": {
+      "main": [
+        [
+          {
+            "node": "Prepare Alert State Updates",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Alert State Updates": {
+      "main": [
+        [
+          {
+            "node": "Save Alert State",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Low-Stock Alert": {
+      "main": [
+        [
+          {
+            "node": "Send an Email1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save Alert State": {
+      "main": [
+        []
+      ]
+    },
+    "Is Alert Reset Required": {
+      "main": [
+        [
+          {
+            "node": "Prepare Alert Reset",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Alert Reset": {
+      "main": [
+        [
+          {
+            "node": "Reset Alert State",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false,
+    "timeSavedMode": "fixed",
+    "timezone": "Africa/Lagos",
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "nodeGroups": [],
+  "tags": []
+}
